@@ -53,7 +53,7 @@ static inline void LogMessage(LogStruct* log, const char* message) {
 static inline void PushSourceToDestination(const PathStack* source, 
 					   PathStack* dest) {
 	int i = source->top - 1;
-	while((source->path[i] != '\\') && (0 <= i)) {
+	while((source->path[i] != '\\') && (0 < i)) {
 		i--;
 	}
 
@@ -83,10 +83,12 @@ static inline void PopFullDir(PathStack* path) {
 }
 
 static inline void PopLastName(PathStack* path) {
-	while((path->path[path->top - 1] != '\\') && (0 < path->top)) {
-		path->path[path->top - 1] = '\0';
+	path->top--;
+	while((path->path[path->top] != '\\') && (0 < path->top)) {
+		path->path[path->top] = '\0';
 		path->top--;
 	}
+	path->top++;
 }
 
 static bool CheckTimeDiff(const char* source, const char* destination) {
@@ -129,6 +131,7 @@ static void BackupDirectoryRecursively(PathStack* source,
 	WIN32_FIND_DATA file_data;
 	HANDLE file_handle = FindFirstFileA(source->path, &file_data);
 	if(file_handle == INVALID_HANDLE_VALUE) {
+		log->error_count++;
 		LogMessage(log, "\tERROR: INVALID_HANDLE_VALUE\r\n\t");
 		LogMessage(log, source->path);
 		LogMessage(log, "\r\n\tThis folder will not be backed up\r\n");
