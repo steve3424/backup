@@ -278,6 +278,7 @@ int main() {
 	PathStack destination = {0};
 	InitializePathsFromCommandLine(&source, &destination);
 
+
 	LogStruct log = {0};
 	OpenLogFile(&log);
 	if(log.handle == INVALID_HANDLE_VALUE) {
@@ -330,6 +331,8 @@ int main() {
 
 	BackupDirectoryRecursively(&source, &destination, &log);
 
+
+
 	// LOG STATS
 	char log_stats_string[256] = {0};
 	_snprintf_s(log_stats_string, 256, _TRUNCATE,
@@ -358,18 +361,29 @@ int main() {
 		    system_time.wSecond);
 	LogMessage(&log, end_message);
 
+	ULARGE_INTEGER total_bytes = {0};
+	ULARGE_INTEGER free_bytes = {0};
+	GetDiskFreeSpaceExA(destination.path, NULL, &total_bytes, &free_bytes);
+	total_bytes.QuadPart /= 1024ull * 1024ull * 1024ull;
+	free_bytes.QuadPart /= 1024ull * 1024ull * 1024ull;
+
 	char message_stats_string[256] = {0};
 	_snprintf_s(message_stats_string, 256, _TRUNCATE,
 		    "Backup Complete!!\r\n"
 		    "%d files checked\r\n"
 		    "%d folders checked\r\n"
 		    "%d out of %d files copied.\r\n"
-		    "%d errors occurred.\r\n",
+		    "%d errors occurred.\r\n"
+		    "%lld free GB\r\n"
+		    "%lld total GB\r\n",
 		    log.files_checked_count,
 		    log.folders_checked_count,
 		    log.should_copy_count,
 		    log.copy_success_count,
-		    log.error_count);
+		    log.error_count,
+		    free_bytes.QuadPart,
+		    total_bytes.QuadPart);
+	
 	
 	MessageBox(NULL, message_stats_string, "Complete", MB_OK);
 	
