@@ -173,9 +173,17 @@ static void BackupDirectoryRecursively(PathStack* source,
 					log->copy_success_count++;
 				}
 				else {
+					DWORD last_error = GetLastError();
+					char message_stats_string[256] = {0};
+					_snprintf_s(message_stats_string, 256, _TRUNCATE,
+						    "\tERROR: Copy failed with error code %d\r\n",
+						    last_error);
 					LogMessage(log, "\tERROR: ");
 					LogMessage(log, source->path);
 					LogMessage(log, " was not copied\r\n");
+					LogMessage(log, message_stats_string);
+
+					log->error_count++;
 				}
 			}
 		}
@@ -343,8 +351,8 @@ int main() {
 		    "\t%d errors occurred.\r\n",
 		    log.files_checked_count,
 		    log.folders_checked_count,
-		    log.should_copy_count,
 		    log.copy_success_count,
+		    log.should_copy_count,
 		    log.error_count);
 	LogMessage(&log, log_stats_string);
 
@@ -378,8 +386,8 @@ int main() {
 		    "%lld total GB\r\n",
 		    log.files_checked_count,
 		    log.folders_checked_count,
-		    log.should_copy_count,
 		    log.copy_success_count,
+		    log.should_copy_count,
 		    log.error_count,
 		    free_bytes.QuadPart,
 		    total_bytes.QuadPart);
