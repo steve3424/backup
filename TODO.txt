@@ -1,0 +1,4 @@
+- Fix how paths are handled. MAX_PATH isn't actually the max path length I don't think.
+- Use windows folder picker gui instead of typing paths in the command line.
+- Use txt files to set default backups.
+- Use a hash to determine if files have changed instead of write time.
