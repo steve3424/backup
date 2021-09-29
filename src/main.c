@@ -12,24 +12,17 @@
   backed up, but a full copy is backed up the next time it is run
 */
 
-/*
-- TODO: profile
-*/
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <windows.h>
+#include <shlobj.h>
 
-// NOTE: CreateDirectoryA has path limit of 248 characters which is
-//	 MAX_PATH (260) - 12
-#define MAX_PATH_LENGTH (MAX_PATH - 12)
-
-
-typedef struct PathStack {
-	char path[MAX_PATH_LENGTH];
+typedef struct Path {
+	char path[MAX_PATH];
 	int top;
-} PathStack;
+} Path;
 
 typedef struct LogStruct {
 	HANDLE handle;
@@ -50,30 +43,31 @@ static inline void LogMessage(LogStruct* log, const char* message) {
 		  NULL);
 }
 
-static inline void PushSourceToDestination(const PathStack* source, 
-					   PathStack* dest) {
+static inline void PushSourceToDestination(const Path* source, 
+					   				       Path* dest) 
+{
 	int i = source->top - 1;
 	while((source->path[i] != '\\') && (0 < i)) {
 		i--;
 	}
 
-	while((source->path[i] != '\0') && (dest->top < MAX_PATH_LENGTH)) {
+	while((i < source->top) && (dest->top < MAX_PATH)) {
 		dest->path[dest->top] = source->path[i];
 		i++;
 		dest->top++;
 	}
 }
 
-static inline void PushToPath(PathStack* path, const char* to_push) {
+static inline void PushToPath(Path* path, const char* to_push) {
 	int i = 0;
-	while((to_push[i] != '\0') && (path->top < MAX_PATH_LENGTH)) {
+	while((to_push[i] != '\0') && (path->top < MAX_PATH)) {
 		path->path[path->top] = to_push[i];
 		i++;
 		path->top++;
 	}
 }
 
-static inline void PopFullDir(PathStack* path) {
+static inline void PopFullDir(Path* path) {
 	path->top--;
 	while((path->path[path->top] != '\\') && (0 < path->top)) {
 		path->path[path->top] = '\0';
@@ -82,7 +76,7 @@ static inline void PopFullDir(PathStack* path) {
 	path->path[path->top] = '\0';
 }
 
-static inline void PopLastName(PathStack* path) {
+static inline void PopLastName(Path* path) {
 	path->top--;
 	while((path->path[path->top] != '\\') && (0 < path->top)) {
 		path->path[path->top] = '\0';
@@ -119,8 +113,8 @@ static bool CheckTimeDiff(const char* source, const char* destination) {
 	return false;
 }
 
-static void BackupDirectoryRecursively(PathStack* source, 
-				       PathStack* destination,
+static void BackupDirectoryRecursively(Path* source, 
+				       Path* destination,
 				       LogStruct* log)
 {
 
@@ -209,37 +203,13 @@ static void BackupDirectoryRecursively(PathStack* source,
 	PopFullDir(destination);
 }
 
-static inline void InitializePathsFromCommandLine(PathStack* source,
-						  PathStack* destination)
-{
-	printf("Folder to backup: ");
-	int c = getchar();
-	while((source->top < MAX_PATH_LENGTH) && 
-		(c != '\n') && 
-		(c != EOF)) 
-	{
-		source->path[source->top] = c;
-		source->top++;
-		c = getchar();
-	}
-
-	printf("Backup location: ");
-	c = getchar();
-	while((destination->top < MAX_PATH_LENGTH) && 
-		(c != '\n') && 
-		(c != EOF)) {
-
-		destination->path[destination->top] = c;
-		destination->top++;
-		c = getchar();
-	}
-}
-
 static inline void OpenLogFile(LogStruct* log) {
-	char log_file_path[64] = {0};
+	CreateDirectoryA("..\\logs", NULL);
+
+	char log_file_path[MAX_PATH] = {0};
 	SYSTEMTIME system_time = {0};
 	GetLocalTime(&system_time);
-	_snprintf_s(log_file_path, 64, _TRUNCATE, 
+	_snprintf_s(log_file_path, MAX_PATH - 1, _TRUNCATE, 
 		    "..\\logs\\log_%d-%d-%d_%d-%d-%d.txt", 
 		    system_time.wMonth,
 		    system_time.wDay,
@@ -256,36 +226,71 @@ static inline void OpenLogFile(LogStruct* log) {
 				  NULL);
 }
 
-static inline BOOL ValidatePath(PathStack* path, LogStruct* log) {
-	WIN32_FILE_ATTRIBUTE_DATA file_data = {0};
-	BOOL path_found = GetFileAttributesExA(path->path,
-						GetFileExInfoStandard,
-						&file_data);
-	BOOL path_is_dir = (file_data.dwFileAttributes & 
-			     FILE_ATTRIBUTE_DIRECTORY);
-	if(!path_found) {
-		log->error_count++;
-		LogMessage(log, "\tERROR: ");
-		LogMessage(log, path->path);
-		LogMessage(log, " path not found\r\n");
-		return false;
-	}
-	if(!path_is_dir) {
-		log->error_count++;
-		LogMessage(log, "\tERROR: ");
-		LogMessage(log, path->path);
-		LogMessage(log, " path is not a directory\r\n");
-		return false;
-	}
+static int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
+{
 
-	return true;
+    if(uMsg == BFFM_VALIDATEFAILED)
+    {
+		printf("Validate failed. %s\n", (char*)lParam);
+		return 1;
+    }
+
+    return 0;
+}
+
+// TODO: Handle shortcut paths properly
+static void SetSourcePath(Path* src) {
+    BROWSEINFO bi = {0};
+    bi.lpszTitle  = "Choose folder to backup...";
+    bi.ulFlags    = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    bi.lpfn       = BrowseCallbackProc;
+
+    LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
+	SHGetPathFromIDListA(pidl, src->path);
+
+	src->top = strlen(src->path);
+
+	ILFree(pidl);
+}
+
+static void SetDestinationPath(Path* dst) {
+    BROWSEINFO bi = {0};
+    bi.lpszTitle  = "Choose backup destination...";
+    bi.ulFlags    = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    bi.lpfn       = BrowseCallbackProc;
+
+    LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
+	SHGetPathFromIDListA(pidl, dst->path);
+
+	dst->top = strlen(dst->path);
+
+	ILFree(pidl);
 }
 
 int main() {
-	PathStack source = {0};
-	PathStack destination = {0};
-	InitializePathsFromCommandLine(&source, &destination);
+	Path src = {0};
+	Path dst = {0};
 
+	SetSourcePath(&src);
+	SetDestinationPath(&dst);
+
+	if(src.top == 0) {
+		MessageBox(NULL,
+		   	"Invalid source folder.\n"
+			"Backup not started.",
+		   	NULL,
+		   	MB_OK);
+		return 1;
+	}
+
+	if(dst.top == 0) {
+		MessageBox(NULL,
+		   	"Invalid destination folder.\n"
+			"Backup not started.",
+		   	NULL,
+		   	MB_OK);
+		return 1;
+	}
 
 	LogStruct log = {0};
 	OpenLogFile(&log);
@@ -295,33 +300,10 @@ int main() {
 			"Backup not started.",
 		   	NULL,
 		   	MB_OK);
-		exit(1);
+		return 1;
 	}
 
-
-	bool source_path_valid = ValidatePath(&source, &log);
-	if(!source_path_valid) {
-		MessageBox(NULL,
-			   "Source path is invalid.\n"
-			   "Backup not started.",
-			   NULL,
-			   MB_OK);
-		exit(1);
-	}
-
-	bool destination_path_valid = ValidatePath(&destination, &log);
-	if(!destination_path_valid) {
-		MessageBox(NULL,
-			   "Destination path is invalid.\n"
-			   "Backup not started.",
-			   NULL,
-			   MB_OK);
-		exit(1);
-	}
-
-
-	PushSourceToDestination(&source, &destination);
-
+	PushSourceToDestination(&src, &dst);
 
 	// LOG START TIME
 	SYSTEMTIME system_time;
@@ -337,9 +319,7 @@ int main() {
 		    system_time.wSecond);
 	LogMessage(&log, start_message);
 
-	BackupDirectoryRecursively(&source, &destination, &log);
-
-
+	BackupDirectoryRecursively(&src, &dst, &log);
 
 	// LOG STATS
 	char log_stats_string[256] = {0};
@@ -371,7 +351,7 @@ int main() {
 
 	ULARGE_INTEGER total_bytes = {0};
 	ULARGE_INTEGER free_bytes = {0};
-	GetDiskFreeSpaceExA(destination.path, NULL, &total_bytes, &free_bytes);
+	GetDiskFreeSpaceExA(dst.path, NULL, &total_bytes, &free_bytes);
 	total_bytes.QuadPart /= 1024ull * 1024ull * 1024ull;
 	free_bytes.QuadPart /= 1024ull * 1024ull * 1024ull;
 
@@ -397,3 +377,4 @@ int main() {
 	
 	return 0;
 }
+

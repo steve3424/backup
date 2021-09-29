@@ -1,4 +1,4 @@
-- Use windows folder picker gui instead of typing paths in the command line.
 - Use a hash to determine if files have changed instead of write time.
 - Handle long paths
 - Use txt files to set default backups.
+- Maybe get rid of reliance on null terminated strings
