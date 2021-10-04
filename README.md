@@ -1,2 +1,2 @@
-##Backup
+## Backup
 Simple differential backup utility for Windows. It does a DFS through the selected src folder and dst folder (on a connected drive). If the file doesn't exist on the dst folder, it will be copied. If file write times differ by more than 10 seconds, it will be overwritten by the src file. This is not meant to be a robust backup system by any means. It is meant to backup a full copy of selected folder and be very fast if not much of the folder has changed.
